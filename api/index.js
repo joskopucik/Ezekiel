@@ -7,25 +7,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
-
-// --- CONFIG ---
-const VISIT_WEBHOOK = "YOUR_VISIT_WEBHOOK_URL_HERE";
-const WIDGET_WEBHOOK = "YOUR_WIDGET_WEBHOOK_URL_HERE";
-
-async function logToDiscord(webhookUrl, embed) {
-  if (!webhookUrl || webhookUrl.includes("YOUR_")) return;
-  try {
-    await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ embeds: [embed] })
-    });
-  } catch (err) {
-    console.error("Webhook error:", err);
-  }
-}
-
 const LANG_COLORS = {
   JavaScript:'#f1e05a', TypeScript:'#3178c6', Python:'#3572A5', Java:'#b07219',
   'C++':'#f34b7d', C:'#555555', 'C#':'#178600', PHP:'#4F5D95', Ruby:'#701516',
@@ -88,24 +69,19 @@ ${verticalSkew ? `
 }
 
 function statsCard(user, repos, theme) {
-  const W = 480, H = 160;
+  const W = 380, H = 160; // Narrower box
   const totalStars = repos.reduce((s, r) => s + r.stargazers_count, 0);
-  const totalForks = repos.reduce((s, r) => s + r.forks_count, 0);
   
-  const forkIcon = `<path d="M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.251 2.251 0 0 1-2.25 2.25h-1.5v1.505a2.25 2.25 0 1 1-1.5 0V7.5h-1.5A2.251 2.251 0 0 1 3.5 5.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75 0a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm-3 10.5a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z" fill-rule="evenodd" />`;
-
   const items = [
     { label:'Repos', val: user.public_repos },
     { label:'Stars', val: totalStars },
-    { label:'Forks', val: totalForks, icon: forkIcon },
     { label:'Followers', val: user.followers },
   ];
 
   const cells = items.map((it, i) => {
-    const x = W / 8 + (i * W / 4);
-    const y = H / 2 - 5; // Even higher centering
+    const x = W / 6 + (i * W / 3);
+    const y = H / 2 - 5;
     return `<g class="count-anim" style="animation-delay: ${i * 0.1}s">
-              ${it.icon ? `<svg x="${x - 7}" y="${y - 45}" width="14" height="14" viewBox="0 0 16 16" fill="currentColor" opacity="0.4">${it.icon}</svg>` : ''}
               <text x="${x}" y="${y}" text-anchor="middle" class="val" style="font-size: 28px;">${fk(it.val)}</text>
               <text x="${x}" y="${y + 22}" text-anchor="middle" class="label">${it.label}</text>
             </g>`;
@@ -116,12 +92,10 @@ function statsCard(user, repos, theme) {
 function langsCard(langs, theme) {
   const rawTotal = langs.reduce((s, l) => s + l.bytes, 0);
   const top = langs.filter(l => (l.bytes / rawTotal) * 100 >= 1.5);
-  
-  // New: Calculate total bytes only for filtered languages for a 100% donut fill
   const filteredTotal = top.reduce((s, l) => s + l.bytes, 0);
   
   const cols = Math.ceil(top.length / 5);
-  const colWidth = 200; // Increased column width
+  const colWidth = 200;
   const W = 210 + cols * colWidth;
   const H = 180;
   const R = 50, C = 2 * Math.PI * R;
@@ -130,7 +104,7 @@ function langsCard(langs, theme) {
   
   let currentOffset = 0;
   const slices = top.map((l, i) => {
-    const pct = l.bytes / filteredTotal; // Full 100% relative fill
+    const pct = l.bytes / filteredTotal;
     const dashArray = `${pct * C} ${C}`;
     const dashOffset = -currentOffset;
     currentOffset += pct * C;
@@ -220,100 +194,23 @@ async function getData(username) {
 function sendSVG(res, svg) { res.setHeader('Content-Type', 'image/svg+xml'); res.send(svg); }
 
 app.get('/api/stats', async (req, res) => {
-  const username = req.query.username;
-  const { user, repos } = await getData(username);
-
-  logToDiscord(WIDGET_WEBHOOK, {
-    title: "Widget Hit: Stats",
-    color: 0x00ff00,
-    fields: [
-      { name: "User", value: `[${username}](https://github.com/${username})`, inline: true },
-      { name: "Theme", value: req.query.theme || 'dark', inline: true },
-      { name: "IP", value: req.headers['x-forwarded-for'] || req.ip, inline: false }
-    ],
-    timestamp: new Date().toISOString()
-  });
-
+  const { user, repos } = await getData(req.query.username);
   sendSVG(res, statsCard(user, repos, req.query.theme));
 });
 
 app.get('/api/top-langs', async (req, res) => {
-  const username = req.query.username;
-  const { langs } = await getData(username);
-
-  logToDiscord(WIDGET_WEBHOOK, {
-    title: "Widget Hit: Top Langs",
-    color: 0x3498db,
-    fields: [
-      { name: "User", value: `[${username}](https://github.com/${username})`, inline: true },
-      { name: "Theme", value: req.query.theme || 'dark', inline: true },
-      { name: "IP", value: req.headers['x-forwarded-for'] || req.ip, inline: false }
-    ],
-    timestamp: new Date().toISOString()
-  });
-
+  const { langs } = await getData(req.query.username);
   sendSVG(res, langsCard(langs, req.query.theme));
 });
 
 app.get('/api/graph', async (req, res) => {
-  const username = req.query.username;
-  const { repos, langs } = await getData(username);
-  
-  logToDiscord(WIDGET_WEBHOOK, {
-    title: "Widget Hit: Graph",
-    color: 0xe67e22,
-    fields: [
-      { name: "User", value: `[${username}](https://github.com/${username})`, inline: true },
-      { name: "Theme", value: req.query.theme || 'dark', inline: true },
-      { name: "IP", value: req.headers['x-forwarded-for'] || req.ip, inline: false }
-    ],
-    timestamp: new Date().toISOString()
-  });
-
+  const { repos, langs } = await getData(req.query.username);
   const rawTotal = langs.reduce((s, l) => s + l.bytes, 0);
   const filteredLangs = langs.filter(l => (l.bytes / rawTotal) * 100 >= 1.5);
   const cols = Math.ceil(filteredLangs.length / 5);
   const langW = 210 + cols * 200;
-  const totalW = 480 + 3 + langW;
+  const totalW = 380 + 3 + langW; // New narrower Stats (380) + gap + Languages
   sendSVG(res, graphCard(repos, req.query.theme, totalW));
-});
-
-// Log main site visit
-app.post('/api/visit', (req, res) => {
-  const ip = req.headers['x-forwarded-for'] || req.ip;
-  const ua = req.headers['user-agent'];
-  const referer = req.headers['referer'] || 'Direct';
-  
-  logToDiscord(VISIT_WEBHOOK, {
-    title: "🌐 New Site Visit",
-    color: 0x34495e,
-    fields: [
-      { name: "IP Address", value: `\`${ip}\``, inline: true },
-      { name: "Referer", value: referer, inline: true },
-      { name: "User Agent", value: `\`${ua}\``, inline: false },
-      { name: "Device Info", value: req.body.screen || 'Unknown', inline: true }
-    ],
-    footer: { text: "Site Visit Logger" },
-    timestamp: new Date().toISOString()
-  });
-  res.sendStatus(200);
-});
-
-// Log search usage
-app.post('/api/log-search', (req, res) => {
-  const { username } = req.body;
-  const ip = req.headers['x-forwarded-for'] || req.ip;
-
-  logToDiscord(WIDGET_WEBHOOK, {
-    title: "🔍 UI Search Usage",
-    color: 0xf1c40f,
-    fields: [
-      { name: "Target User", value: `[${username}](https://github.com/${username})`, inline: true },
-      { name: "IP Address", value: `\`${ip}\``, inline: true }
-    ],
-    timestamp: new Date().toISOString()
-  });
-  res.sendStatus(200);
 });
 
 module.exports = app;
