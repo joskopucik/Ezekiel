@@ -84,7 +84,7 @@ function statsCard(user, repos, theme) {
 
   const cells = items.map((it, i) => {
     const x = W / 8 + (i * W / 4);
-    const y = H / 2 + 10;
+    const y = H / 2 + 5; // Moved slightly up from +10
     return `<g class="count-anim" style="animation-delay: ${i * 0.1}s">
               ${it.icon ? `<svg x="${x - 7}" y="${y - 45}" width="14" height="14" viewBox="0 0 16 16" fill="currentColor" opacity="0.4">${it.icon}</svg>` : ''}
               <text x="${x}" y="${y}" text-anchor="middle" class="val" style="font-size: 28px;">${fk(it.val)}</text>
@@ -95,14 +95,16 @@ function statsCard(user, repos, theme) {
 }
 
 function langsCard(langs, theme) {
-  const top = langs;
+  const realTotal = langs.reduce((s, l) => s + l.bytes, 0);
+  const top = langs.filter(l => (l.bytes / realTotal) * 100 >= 1.5); // Filter < 1.5%
+  
   const cols = Math.ceil(top.length / 5);
   const W = 180 + cols * 180;
   const H = 180;
-  const realTotal = langs.reduce((s, l) => s + l.bytes, 0);
   const R = 50, C = 2 * Math.PI * R;
   const centerY = H / 2;
   const bgCircle = `<circle cx="100" cy="${centerY}" r="${R}" fill="none" stroke="currentColor" stroke-width="16" opacity="0.05" />`;
+  
   let currentOffset = 0;
   const slices = top.slice(0, 10).map((l, i) => {
     const pct = l.bytes / realTotal;
@@ -112,6 +114,7 @@ function langsCard(langs, theme) {
     return `<circle cx="100" cy="${centerY}" r="${R}" fill="none" stroke="${getLangColor(l.name)}" stroke-width="16" 
             stroke-dasharray="${dashArray}" stroke-dashoffset="${dashOffset}" transform="rotate(-90 100 ${centerY})" />`;
   }).join('');
+
   const legend = top.map((l, i) => {
     const col = Math.floor(i / 5);
     const row = i % 5;
@@ -123,6 +126,7 @@ function langsCard(langs, theme) {
               <text x="${x + 150}" y="${y}" text-anchor="end" class="label" style="opacity: 0.3;">${((l.bytes / realTotal) * 100).toFixed(1)}%</text>
             </g>`;
   }).join('');
+
   const mask = `<mask id="donutMask"><circle cx="100" cy="${centerY}" r="${R}" fill="none" stroke="white" stroke-width="20" class="donut-mask-anim" transform="rotate(-90 100 ${centerY})" /></mask>`;
   return shell(W, H, `${bgCircle}<g mask="url(#donutMask)">${slices}</g>${legend}`, theme).replace('</defs>', `${mask}</defs>`);
 }
@@ -204,7 +208,9 @@ app.get('/api/top-langs', async (req, res) => {
 
 app.get('/api/graph', async (req, res) => {
   const { repos, langs } = await getData(req.query.username);
-  const cols = Math.ceil(langs.length / 5);
+  const realTotal = langs.reduce((s, l) => s + l.bytes, 0);
+  const filteredLangs = langs.filter(l => (l.bytes / realTotal) * 100 >= 1.5);
+  const cols = Math.ceil(filteredLangs.length / 5);
   const langW = 180 + cols * 180;
   const totalW = 480 + 3 + langW;
   sendSVG(res, graphCard(repos, req.query.theme, totalW));
