@@ -36,15 +36,11 @@ function shell(w, h, body, themeName = 'dark', verticalSkew = false) {
     .label { font-size: 11px; font-weight: 600; opacity: 0.4; letter-spacing: 0.1em; text-transform: uppercase; }
     .skew { font-size: 10px; font-weight: 600; fill: ${text}; opacity: 0.15; }
     
-    @keyframes countPop { 
-      0% { opacity: 0; transform: scale(0.8) translateY(10px); } 
-      70% { transform: scale(1.05) translateY(-2px); }
-      100% { opacity: 1; transform: scale(1) translateY(0); } 
-    }
+    @keyframes simpleFade { from { opacity: 0; } to { opacity: 1; } }
     @keyframes drawPath { from { stroke-dasharray: 0, 3000; } to { stroke-dasharray: 3000, 0; } }
     @keyframes revealDonut { from { stroke-dasharray: 0, 314.16; } to { stroke-dasharray: 314.16, 0; } }
     
-    .count-anim { animation: countPop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both; transform-origin: center; }
+    .fade-anim { animation: simpleFade 1.2s ease-out both; }
     .path-anim { stroke-dasharray: 3000; stroke-dashoffset: 3000; animation: drawPath 2.5s ease-in-out forwards; }
     .donut-mask-anim { stroke-dasharray: 0, 314.16; animation: revealDonut 1.8s cubic-bezier(0.65, 0, 0.35, 1) forwards; }
   </style>
@@ -69,7 +65,7 @@ ${verticalSkew ? `
 }
 
 function statsCard(user, repos, theme) {
-  const W = 380, H = 160; // Narrower box
+  const W = 384, H = 160; // Widened by 4px
   const totalStars = repos.reduce((s, r) => s + r.stargazers_count, 0);
   
   const items = [
@@ -81,7 +77,7 @@ function statsCard(user, repos, theme) {
   const cells = items.map((it, i) => {
     const x = W / 6 + (i * W / 3);
     const y = H / 2 - 5;
-    return `<g class="count-anim" style="animation-delay: ${i * 0.1}s">
+    return `<g class="fade-anim" style="animation-delay: ${i * 0.15}s">
               <text x="${x}" y="${y}" text-anchor="middle" class="val" style="font-size: 28px;">${fk(it.val)}</text>
               <text x="${x}" y="${y + 22}" text-anchor="middle" class="label">${it.label}</text>
             </g>`;
@@ -93,7 +89,6 @@ function langsCard(langs, theme) {
   const rawTotal = langs.reduce((s, l) => s + l.bytes, 0);
   const top = langs.filter(l => (l.bytes / rawTotal) * 100 >= 1.5);
   const filteredTotal = top.reduce((s, l) => s + l.bytes, 0);
-  
   const cols = Math.ceil(top.length / 5);
   const colWidth = 200;
   const W = 210 + cols * colWidth;
@@ -101,7 +96,6 @@ function langsCard(langs, theme) {
   const R = 50, C = 2 * Math.PI * R;
   const centerY = H / 2;
   const bgCircle = `<circle cx="100" cy="${centerY}" r="${R}" fill="none" stroke="currentColor" stroke-width="16" opacity="0.05" />`;
-  
   let currentOffset = 0;
   const slices = top.map((l, i) => {
     const pct = l.bytes / filteredTotal;
@@ -111,24 +105,22 @@ function langsCard(langs, theme) {
     return `<circle cx="100" cy="${centerY}" r="${R}" fill="none" stroke="${getLangColor(l.name)}" stroke-width="16" 
             stroke-dasharray="${dashArray}" stroke-dashoffset="${dashOffset}" transform="rotate(-90 100 ${centerY})" />`;
   }).join('');
-
   const legend = top.map((l, i) => {
     const col = Math.floor(i / 5);
     const row = i % 5;
     const x = 210 + col * colWidth;
     const y = (centerY - (5 * 22 / 2)) + row * 22 + 9;
-    return `<g class="count-anim" style="animation-delay: ${i * 0.05}s">
+    return `<g class="fade-anim" style="animation-delay: ${i * 0.05}s">
               <circle cx="${x}" cy="${y - 4}" r="5" fill="${getLangColor(l.name)}"/>
               <text x="${x + 15}" y="${y}" style="font-size: 13px; font-weight: 700;">${esc(l.name)}</text>
               <text x="${x + 175}" y="${y}" text-anchor="end" class="label" style="opacity: 0.3;">${((l.bytes / rawTotal) * 100).toFixed(1)}%</text>
             </g>`;
   }).join('');
-
   const mask = `<mask id="donutMask"><circle cx="100" cy="${centerY}" r="${R}" fill="none" stroke="white" stroke-width="20" class="donut-mask-anim" transform="rotate(-90 100 ${centerY})" /></mask>`;
   return shell(W, H, `${bgCircle}<g mask="url(#donutMask)">${slices}</g>${legend}`, theme).replace('</defs>', `${mask}</defs>`);
 }
 
-function graphCard(repos, theme, w = 903) {
+function graphCard(repos, theme, w = 907) {
   const W = w, H = 200;
   const isDark = theme !== 'light';
   const color = isDark ? '#ffffff' : '#000000';
@@ -209,7 +201,7 @@ app.get('/api/graph', async (req, res) => {
   const filteredLangs = langs.filter(l => (l.bytes / rawTotal) * 100 >= 1.5);
   const cols = Math.ceil(filteredLangs.length / 5);
   const langW = 210 + cols * 200;
-  const totalW = 380 + 3 + langW; // New narrower Stats (380) + gap + Languages
+  const totalW = 384 + 3 + langW; // 384 Overview + 3 gap + Langs
   sendSVG(res, graphCard(repos, req.query.theme, totalW));
 });
 
